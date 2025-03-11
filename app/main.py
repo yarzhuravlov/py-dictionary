@@ -39,18 +39,8 @@ class Dictionary:
         self.hash_table = [None] * 8
         self.load_factor = 2 / 3
 
-    def __resize(self) -> None:
-        self.capacity *= 2
-        old_hash_table = self.hash_table
-        self.length = 0
-        self.hash_table = [None] * self.capacity
-
-        for hash_table_value in old_hash_table:
-            if hash_table_value:
-                self.__setitem__(
-                    hash_table_value["key"],
-                    hash_table_value["value"]
-                )
+    def __iter__(self) -> DictionaryIterator:
+        return DictionaryIterator(self)
 
     def __setitem__(self, key: any, value: any) -> None:
         key_hash = hash(key)
@@ -80,42 +70,19 @@ class Dictionary:
         key_hash = hash(key)
         index = key_hash % self.capacity
 
-        try:
-            if self.hash_table[index]["key"] == key:
-                return self.hash_table[index]["value"]
-            else:
-                while self.hash_table[index]["key"] != key:
-                    index = (index + 1) % self.capacity
+        while (
+                self.hash_table[index]
+                and self.hash_table[index]["key"] != key
+        ):
+            index = (index + 1) % self.capacity
 
-                return self.hash_table[index]["value"]
-        except TypeError:
+        if not self.hash_table[index]:
             raise KeyError(key)
+
+        return self.hash_table[index]["value"]
 
     def __len__(self) -> int:
         return self.length
-
-    def clear(self) -> None:
-        self.capacity = 8
-        self.hash_table = [None] * self.capacity
-        self.length = 0
-
-    def __rebuild(self, index: int) -> int:
-        prev_index = index
-        current_index = (index + 1) % self.capacity
-
-        while current_index != index:
-            hash_table_item = self.hash_table[current_index]
-            if (
-                    hash_table_item
-                    and hash_table_item["hash"] % self.capacity == index
-            ):
-                self.hash_table[prev_index] = self.hash_table[current_index]
-                self.hash_table[current_index] = None
-                prev_index = self.__rebuild(current_index)
-
-            current_index = (current_index + 1) % self.capacity
-
-        return prev_index
 
     def __delitem__(self, key: any) -> None:
         key_hash = hash(key)
@@ -137,26 +104,70 @@ class Dictionary:
 
         self.length -= 1
 
-    def get(self, key: any, default_value: None) -> any:
+    def __resize(self) -> None:
+        self.capacity *= 2
+        old_hash_table = self.hash_table
+        self.length = 0
+        self.hash_table = [None] * self.capacity
+
+        for hash_table_value in old_hash_table:
+            if hash_table_value:
+                self.__setitem__(
+                    hash_table_value["key"],
+                    hash_table_value["value"]
+                )
+
+    def __rebuild(self, index: int) -> int:
+        prev_index = index
+        current_index = (index + 1) % self.capacity
+
+        while current_index != index:
+            hash_table_item = self.hash_table[current_index]
+            if (
+                    hash_table_item
+                    and hash_table_item["hash"] % self.capacity == index
+            ):
+                self.hash_table[prev_index] = self.hash_table[current_index]
+                self.hash_table[current_index] = None
+                prev_index = self.__rebuild(current_index)
+
+            current_index = (current_index + 1) % self.capacity
+
+        return prev_index
+
+    def clear(self) -> None:
+        self.capacity = 8
+        self.hash_table = [None] * self.capacity
+        self.length = 0
+
+    def get(self, key: any, default_value: any = None) -> any:
         try:
             return self[key]
         except KeyError:
             return default_value
 
-    def pop(self, key: any, default_value: None) -> any:
-        value = default_value
+    def pop(self, key: any, *args: any) -> any:
+        if len(args) > 1:
+            raise TypeError(
+                f"pop expected at most 2 arguments, got {len(args) + 1}"
+            )
 
         try:
             value = self[key]
             del self[key]
         except KeyError:
-            pass
+            if len(args) == 1:
+                return args[0]
+            raise
 
         return value
 
     def update(self, *args, **kwargs) -> None:
         if args and len(args) != 1:
-            raise TypeError("update expected at most 1 argument, got 2")
+            raise TypeError(
+                "update expected at most 1 positional "
+                "argument, got 2"
+            )
 
         if args:
             if hasattr(args[0], "keys"):
@@ -175,6 +186,3 @@ class Dictionary:
         if kwargs:
             for key, value in kwargs.items():
                 self[key] = value
-
-    def __iter__(self) -> DictionaryIterator:
-        return DictionaryIterator(self)
