@@ -14,19 +14,24 @@ class DictionaryIterator:
         if self.dictionary.length != self.current_size:
             raise Exception("dictionary changed size during iteration")
 
+        hash_table = self.dictionary.hash_table
+
         while (
                 self.current_index < self.dictionary.capacity
-                and not self.dictionary.hash_table[self.current_index]
+                and (
+                    not hash_table[self.current_index]
+                    or hash_table[self.current_index]["deleted"]
+                )
         ):
             self.current_index += 1
 
         if (
                 self.current_index == self.dictionary.capacity
-                or not self.dictionary.hash_table[self.current_index]
+                or not hash_table[self.current_index]
         ):
             raise StopIteration
 
-        key = self.dictionary.hash_table[self.current_index]["key"]
+        key = hash_table[self.current_index]["key"]
         self.current_index += 1
 
         return key
@@ -44,23 +49,37 @@ class Dictionary:
 
     def __setitem__(self, key: any, value: any) -> None:
         key_hash = hash(key)
-        index = key_hash % self.capacity
+        hash_index = key_hash % self.capacity
+        index = hash_index
+        index_to_insert = index
 
         if self.hash_table[index] and self.hash_table[index]["key"] != key:
             index = (index + 1) % self.capacity
             while (
-                    self.hash_table[index]
-                    and self.hash_table[index]["key"] != key
+                    not self.hash_table[index]
+                    or (
+                        index != hash_index
+                        and self.hash_table[index]["key"] != key
+                    )
             ):
+                if (
+                        not self.hash_table[index]
+                        or self.hash_table[index]["deleted"]
+                ) and index_to_insert == hash_index:
+                    index_to_insert = index
                 index = (index + 1) % self.capacity
 
-        if not self.hash_table[index]:
+            if index == hash_index:
+                index = index_to_insert
+
+        if not self.hash_table[index] or self.hash_table[index]["deleted"]:
             self.length += 1
 
         self.hash_table[index] = {
             "key": key,
             "hash": key_hash,
             "value": value,
+            "deleted": False,
         }
 
         if self.length > self.capacity * self.load_factor:
@@ -76,7 +95,7 @@ class Dictionary:
         ):
             index = (index + 1) % self.capacity
 
-        if not self.hash_table[index]:
+        if not self.hash_table[index] or self.hash_table[index]["deleted"]:
             raise KeyError(key)
 
         return self.hash_table[index]["value"]
@@ -98,9 +117,9 @@ class Dictionary:
             if index == hash_index:
                 raise KeyError(key)
 
-        self.hash_table[index] = None
-
-        self.__rebuild(index)
+        self.hash_table[index].update(
+            {"deleted": True}
+        )
 
         self.length -= 1
 
@@ -116,24 +135,6 @@ class Dictionary:
                     hash_table_value["key"],
                     hash_table_value["value"]
                 )
-
-    def __rebuild(self, index: int) -> int:
-        prev_index = index
-        current_index = (index + 1) % self.capacity
-
-        while current_index != index:
-            hash_table_item = self.hash_table[current_index]
-            if (
-                    hash_table_item
-                    and hash_table_item["hash"] % self.capacity == index
-            ):
-                self.hash_table[prev_index] = self.hash_table[current_index]
-                self.hash_table[current_index] = None
-                prev_index = self.__rebuild(current_index)
-
-            current_index = (current_index + 1) % self.capacity
-
-        return prev_index
 
     def clear(self) -> None:
         self.capacity = 8
